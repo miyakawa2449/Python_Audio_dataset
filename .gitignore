@@ -1,0 +1,24 @@
+# filepath: /home/tsuyoshi/projects/python-audio-dataset-creator/.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+pip-selfcheck.json
+pip-log.txt
+*.egg-info/
+.DS_Store
+build/
+dist/
+*.egg
+
+# データセットの音声ファイル (もしリポジトリに含めたくない場合)
+dataset/audio_files/*
+# dataset/metadata.txt (もしリポジトリに含めたくない場合)
+
+# Conda environment files (もしあれば)
+# .conda/
+# conda-meta/
