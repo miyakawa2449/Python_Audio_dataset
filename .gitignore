@@ -17,6 +17,7 @@ dist/
 
 # データセットの音声ファイル (もしリポジトリに含めたくない場合)
 dataset/audio_files/*
+dataset/meta_files/*
 # dataset/metadata.txt (もしリポジトリに含めたくない場合)
 
 # Conda environment files (もしあれば)
