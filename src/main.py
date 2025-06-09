@@ -1,135 +1,158 @@
 # main.py
 
 import os
-import wave
 import time
-import pyaudio
-import threading
+from text_manager import TextManager
+from audio_recorder import AudioRecorder
+from pathlib import Path
 
-def load_scripts(filepath):
-    with open(filepath, 'r', encoding='utf-8') as f:
-        lines = [line.strip() for line in f if line.strip()]
-    return lines
-
-class Recorder:
-    def __init__(self, filename):
-        self.filename = filename
-        self.frames = []
-        self.running = False
-        self.audio = pyaudio.PyAudio()
-        self.stream = None
-        self.thread = None
-
-    def start(self):
-        self.running = True
-        self.frames = []
-        self.stream = self.audio.open(format=pyaudio.paInt16, channels=1, rate=44100, input=True, frames_per_buffer=4096)
-        self.thread = threading.Thread(target=self._record)
-        self.thread.start()
-
-    def _record(self):
-        print("録音中... 's' + Enter で停止")
-        while self.running:
-            data = self.stream.read(4096, exception_on_overflow=False)
-            self.frames.append(data)
-
-    def stop_and_save(self):
-        self.running = False
-        if self.thread is not None:
-            self.thread.join()  # スレッドの終了を必ず待つ
-        self.stream.stop_stream()
-        self.stream.close()
-        self.audio.terminate()
-        with wave.open(self.filename, 'wb') as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(self.audio.get_sample_size(pyaudio.paInt16))
-            wf.setframerate(44100)
-            wf.writeframes(b''.join(self.frames))
-        print("録音終了・保存しました")
-
-def play_audio(filename):
-    chunk = 4096
-    wf = wave.open(filename, 'rb')
-    pa = pyaudio.PyAudio()
-    stream = pa.open(format=pa.get_format_from_width(wf.getsampwidth()),
-                     channels=wf.getnchannels(),
-                     rate=wf.getframerate(),
-                     output=True)
-    data = wf.readframes(chunk)
-    while data:
-        stream.write(data)
-        data = wf.readframes(chunk)
-    stream.stop_stream()
-    stream.close()
-    pa.terminate()
-    wf.close()
-
-def clear_screen():
-    os.system('clear')  # Linux/Mac
-    # os.system('cls')  # Windowsの場合はこちら
-
-def main():
-    input_file = 'data/input/cocoro.txt'
-    audio_dir = 'dataset/audio_files'
-    meta_dir = 'dataset/meta_files'
-    metadata_file = 'dataset/metadata.txt'
-    os.makedirs(audio_dir, exist_ok=True)
-    os.makedirs(meta_dir, exist_ok=True)  # メタファイル用ディレクトリ作成
-
-    scripts = load_scripts(input_file)
-    total = len(scripts)
-    idx = 0
-    metadata = []
-    while idx < total:
-        clear_screen()
-        script = scripts[idx]
-        print(f"台本 [{idx+1}/{total}]:\n{script}")
-        print("\n--- 操作コマンド ---")
-        print("r：録音開始")
-        print("p：録音音声の再生")
-        print("r：再録音")
-        print("s：録音を保存")
-        print("n：次の台本へ")
-        print("="*40)
-        temp_audio = os.path.join(audio_dir, f"audio_{idx+1}_temp.wav")
-        final_audio = os.path.join(audio_dir, f"audio_{idx+1}.wav")
-        meta_file = os.path.join(meta_dir, f"meta_{idx+1}.txt")
-        recorded = False
-        saved = False
-        recorder = None
+class AudioDatasetCreator:
+    def __init__(self):
+        self.text_manager = TextManager()
+        self.audio_recorder = AudioRecorder()
+        self.current_audio = None
+        self.setup_directories()
+    
+    def setup_directories(self):
+        """必要なディレクトリを作成"""
+        Path("dataset/audio_files").mkdir(parents=True, exist_ok=True)
+        Path("dataset/meta_files").mkdir(parents=True, exist_ok=True)
+    
+    def display_interface(self):
+        """ユーザーインターフェースを表示"""
+        os.system('cls' if os.name == 'nt' else 'clear')
+        
+        current_text = self.text_manager.get_current_text()
+        progress = self.text_manager.get_progress()
+        
+        print("=" * 60)
+        print("🎙️  AI音声学習用データセット作成ツール")
+        print("=" * 60)
+        
+        if current_text:
+            print(f"\n📄 原稿ファイル: {current_text['file']}")
+            print(f"📝 台本 ({progress['current']}/{progress['total']}):")
+            print(f"   {current_text['text']}")
+            print(f"\n📊 進捗: {progress['recorded']}/{progress['total']} 録音済み ({progress['progress_percent']:.1f}%)")
+            
+            status = "✅ 録音済み" if current_text['recorded'] else "⭕ 未録音"
+            print(f"📍 状態: {status}")
+        
+        print("\n" + "=" * 60)
+        print("🎛️  操作コマンド:")
+        print("   r  : 録音開始/再開")
+        print("   p  : 録音一時停止")
+        print("   s  : 録音停止・保存")
+        print("   l  : 録音音声の再生")
+        print("   n  : 次の台本へ")
+        print("   b  : 前の台本へ")
+        print("   j  : 指定行にジャンプ")
+        print("   q  : 終了")
+        print("=" * 60)
+    
+    def countdown(self, seconds=3):
+        """カウントダウン表示"""
+        for i in range(seconds, 0, -1):
+            print(f"\r🔴 録音開始まで {i} 秒...", end="", flush=True)
+            time.sleep(1)
+        print("\r🔴 録音中... (pで一時停止、sで停止)    ")
+    
+    def run(self):
+        """メインループ"""
+        # セッション復元または新規作成
+        if not self.text_manager.load_session():
+            print("📚 テキストファイルを読み込んでいます...")
+            self.text_manager.load_all_texts()
+            print(f"✅ {self.text_manager.total_lines} 行のテキストを読み込みました")
+            time.sleep(2)
+        
         while True:
-            cmd = input("コマンドを入力してください（r/p/s/n）: ").strip().lower()
-            if cmd == 'r':
-                print("3秒後に録音開始します...")
-                time.sleep(1)
-                print("2...")
-                time.sleep(1)
-                print("1...")
-                time.sleep(1)
-                recorder = Recorder(temp_audio)
-                recorder.start()
-                input("'s' + Enter で録音を停止します: ")
-                recorder.stop_and_save()
-                recorded = True
-                saved = False
-            elif cmd == 'p' and recorded:
-                print("再生中...")
-                play_audio(temp_audio)
-                print("再生終了")
-            elif cmd == 's' and recorded:
-                os.rename(temp_audio, final_audio)
-                metadata.append(f"{script}|audio_{idx+1}.wav")
-                # 台本テキストをmetaファイルとして保存
-                with open(meta_file, 'w', encoding='utf-8') as mf:
-                    mf.write(script)
-                print(f"保存しました。meta_{idx+1}.txt を作成しました。nで次へ")
-                saved = True
-            elif cmd == 'n' and saved and os.path.exists(final_audio):
+            self.display_interface()
+            command = input("\nコマンドを入力してください: ").strip().lower()
+            
+            if command == 'r':
+                if not self.audio_recorder.is_recording:
+                    self.countdown()
+                    if self.audio_recorder.start_recording():
+                        print("🎙️ 録音開始！")
+                else:
+                    if self.audio_recorder.resume_recording():
+                        print("▶️ 録音再開")
+            
+            elif command == 'p':
+                if self.audio_recorder.is_recording:
+                    self.audio_recorder.pause_recording()
+                    print("⏸️ 録音一時停止")
+            
+            elif command == 's':
+                if self.audio_recorder.is_recording:
+                    self.current_audio = self.audio_recorder.stop_recording()
+                    if self.current_audio is not None:
+                        current_text = self.text_manager.get_current_text()
+                        filename = f"audio_{current_text['file']}_{current_text['line_number']:04d}.wav"
+                        
+                        self.audio_recorder.save_audio(self.current_audio, filename)
+                        self.text_manager.mark_as_recorded(filename)
+                        
+                        # メタファイル保存
+                        self.save_meta_file(current_text, filename)
+                        
+                        print(f"💾 録音保存完了: {filename}")
+                        input("Enterを押して続行...")
+            
+            elif command == 'l':
+                if self.current_audio is not None:
+                    print("🔊 録音音声を再生中...")
+                    self.audio_recorder.play_audio(self.current_audio)
+                else:
+                    print("❌ 再生する音声がありません")
+                    input("Enterを押して続行...")
+            
+            elif command == 'n':
+                if self.text_manager.current_line < self.text_manager.total_lines - 1:
+                    self.text_manager.current_line += 1
+                    self.text_manager.save_session()
+                    self.current_audio = None
+            
+            elif command == 'b':
+                if self.text_manager.current_line > 0:
+                    self.text_manager.current_line -= 1
+                    self.text_manager.save_session()
+                    self.current_audio = None
+            
+            elif command == 'j':
+                try:
+                    line_num = int(input("ジャンプする行番号を入力: ")) - 1
+                    if 0 <= line_num < self.text_manager.total_lines:
+                        self.text_manager.current_line = line_num
+                        self.text_manager.save_session()
+                        self.current_audio = None
+                    else:
+                        print("❌ 無効な行番号です")
+                        input("Enterを押して続行...")
+                except ValueError:
+                    print("❌ 数値を入力してください")
+                    input("Enterを押して続行...")
+            
+            elif command == 'q':
+                if self.audio_recorder.is_recording:
+                    self.audio_recorder.stop_recording()
+                print("👋 お疲れさまでした！")
                 break
-        idx += 1
-    with open(metadata_file, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(metadata))
-    print("全て完了しました。")
+    
+    def save_meta_file(self, text_data, audio_filename):
+        """メタファイルを保存"""
+        meta_filename = f"meta_{text_data['file']}_{text_data['line_number']:04d}.txt"
+        meta_path = Path("dataset/meta_files") / meta_filename
+        
+        with open(meta_path, 'w', encoding='utf-8') as f:
+            f.write(text_data['text'])
+        
+        # 全体のメタデータも更新
+        metadata_path = Path("dataset/metadata.txt")
+        with open(metadata_path, 'a', encoding='utf-8') as f:
+            f.write(f"{audio_filename}|{text_data['text']}\n")
 
 if __name__ == "__main__":
-    main()
+    app = AudioDatasetCreator()
+    app.run()
