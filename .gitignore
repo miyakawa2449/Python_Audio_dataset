@@ -32,6 +32,9 @@ data/input/*
 # セッション状態ファイル
 data/session.json
 
+# 個人用レポートフォルダ（完全非公開）
+Reports/
+
 # Conda environment files
 # .conda/
 # conda-meta/
