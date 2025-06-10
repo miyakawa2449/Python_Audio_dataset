@@ -54,8 +54,11 @@ class AudioRecorder:
             return None
             
         self.is_recording = False
-        self.stream.stop()
-        self.stream.close()
+        self.is_paused = False  # 追加: 停止時にpaused状態もリセット
+        
+        if hasattr(self, 'stream'):
+            self.stream.stop()
+            self.stream.close()
         
         if self.recorded_data:
             return np.array(self.recorded_data)
@@ -83,3 +86,19 @@ class AudioRecorder:
         if audio_data is not None:
             sd.play(audio_data, self.sample_rate)
             sd.wait()
+    
+    def reset_recording(self):
+        """録音状態を完全にリセット"""
+        if self.is_recording:
+            self.stop_recording()
+        
+        self.is_recording = False
+        self.is_paused = False
+        self.recorded_data = []
+        
+        if hasattr(self, 'stream'):
+            try:
+                self.stream.stop()
+                self.stream.close()
+            except:
+                pass  # ストリームが既に閉じられている場合を考慮
