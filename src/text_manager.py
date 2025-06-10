@@ -74,3 +74,22 @@ class TextManager:
             'remaining': self.total_lines - recorded_count,
             'progress_percent': (recorded_count / self.total_lines * 100) if self.total_lines > 0 else 0
         }
+    
+    def sync_with_actual_files(self):
+        """実際のファイル存在状況とセッションデータを同期"""
+        audio_dir = Path("dataset/audio_files")
+        
+        for i, text_item in enumerate(self.all_texts):
+            expected_filename = f"audio_{text_item['file']}_{text_item['line_number']:04d}.wav"
+            audio_file = audio_dir / expected_filename
+            
+            # 実際のファイル存在状況で更新
+            if audio_file.exists():
+                text_item['recorded'] = True
+                text_item['audio_file'] = expected_filename
+            else:
+                text_item['recorded'] = False
+                text_item['audio_file'] = None
+        
+        self.save_session()
+        print(f"📊 ファイル同期完了: {sum(1 for t in self.all_texts if t['recorded'])} 件の録音ファイルを確認")
