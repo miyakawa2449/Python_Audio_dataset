@@ -1,40 +1,55 @@
-# filepath: /home/tsuyoshi/projects/python-audio-dataset-creator/.gitignore
+# 音声データと個人情報（完全非公開）
+dataset/
+data/
+
+# 個人用原稿ファイル
+*.txt
+!README.md
+!requirements.txt
+
+# Python関連
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# IDE関連
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS関連
+.DS_Store
+Thumbs.db
+
+# 一時ファイル
+*.tmp
+*.bak
+*.log
+
+# 環境設定
+.env
+.venv
 env/
 venv/
 ENV/
-pip-selfcheck.json
-pip-log.txt
-*.egg-info/
-.DS_Store
-build/
-dist/
-*.egg
-
-# データセット関連ファイル（フォルダは保持、中身は除外）
-dataset/audio_files/*
-!dataset/audio_files/.gitkeep
-!dataset/audio_files/README.md
-dataset/meta_files/*
-!dataset/meta_files/.gitkeep
-!dataset/meta_files/README.md
-dataset/metadata.txt
-
-# 入力ファイル（個人の原稿データは除外）
-data/input/*
-!data/input/.gitkeep
-!data/input/README.md
-
-# セッション状態ファイル
-data/session.json
-
-# 個人用レポートフォルダ（完全非公開）
-Reports/
-
-# Conda environment files
-# .conda/
-# conda-meta/
+env.bak/
+venv.bak/
