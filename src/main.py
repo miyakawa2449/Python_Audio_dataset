@@ -101,12 +101,16 @@ class AudioDatasetCreator:
             elif command == 's':
                 if self.audio_recorder.is_recording:
                     current_text = self.text_manager.get_current_text()
-                    filename = f"audio_{current_text['file']}_{current_text['line_number']:04d}.wav"
+                    
+                    # 新しいファイル名形式
+                    file_number = self.text_manager.get_next_filename()
+                    audio_filename = f"audio_{file_number}.wav"
+                    meta_filename = f"meta_{file_number}.txt"
                     
                     # 既存ファイルのチェック
-                    existing_file = Path("dataset/audio_files") / filename
-                    if existing_file.exists():
-                        overwrite = input(f"⚠️  {filename} は既に存在します。上書きしますか？ (y/n): ").strip().lower()
+                    existing_audio = Path("dataset/audio_files") / audio_filename
+                    if existing_audio.exists():
+                        overwrite = input(f"⚠️  {audio_filename} は既に存在します。上書きしますか？ (y/n): ").strip().lower()
                         if overwrite != 'y':
                             print("❌ 録音保存をキャンセルしました")
                             input("Enterを押して続行...")
@@ -114,11 +118,20 @@ class AudioDatasetCreator:
                     
                     self.current_audio = self.audio_recorder.stop_recording()
                     if self.current_audio is not None:
-                        self.audio_recorder.save_audio(self.current_audio, filename)
-                        self.text_manager.mark_as_recorded(filename)
-                        self.save_meta_file(current_text, filename)
+                        # 音声ファイル保存
+                        self.audio_recorder.save_audio(self.current_audio, audio_filename)
                         
-                        print(f"💾 録音保存完了: {filename}")
+                        # メタファイル保存
+                        self.save_meta_file(current_text, meta_filename, file_number)
+                        
+                        # metadata.txt更新
+                        self.update_metadata_file(audio_filename, current_text['text'])
+                        
+                        # セッション更新
+                        self.text_manager.mark_as_recorded(audio_filename, file_number)
+                        
+                        print(f"💾 録音保存完了: {audio_filename}")
+                        print(f"📝 テキスト保存: {meta_filename}")
                         input("Enterを押して続行...")
             
             elif command == 'l':
@@ -204,39 +217,20 @@ class AudioDatasetCreator:
                 print("✅ 同期完了")
                 input("Enterを押して続行...")
     
-    def save_meta_file(self, text_data, audio_filename):
-        """メタファイルを保存（重複チェック付き）"""
-        meta_filename = f"meta_{text_data['file']}_{text_data['line_number']:04d}.txt"
+    def save_meta_file(self, text_data, meta_filename, file_number):
+        """メタファイルを保存（新形式）"""
         meta_path = Path("dataset/meta_files") / meta_filename
         
         with open(meta_path, 'w', encoding='utf-8') as f:
             f.write(text_data['text'])
-        
-        # metadata.txtの重複チェック・更新
-        self.update_metadata_file(audio_filename, text_data['text'])
 
     def update_metadata_file(self, audio_filename, text_content):
-        """metadata.txtの重複を防ぐ更新"""
+        """metadata.txtの更新（新形式対応）"""
         metadata_path = Path("dataset/metadata.txt")
         
-        # 既存データを読み込み
-        existing_lines = []
-        if metadata_path.exists():
-            with open(metadata_path, 'r', encoding='utf-8') as f:
-                existing_lines = f.readlines()
-        
-        # 同じ音声ファイル名の行を除去
-        filtered_lines = []
-        for line in existing_lines:
-            if not line.startswith(f"{audio_filename}|"):
-                filtered_lines.append(line)
-        
         # 新しいエントリを追加
-        filtered_lines.append(f"{audio_filename}|{text_content}\n")
-        
-        # ファイルに書き戻し
-        with open(metadata_path, 'w', encoding='utf-8') as f:
-            f.writelines(filtered_lines)
+        with open(metadata_path, 'a', encoding='utf-8') as f:
+            f.write(f"{audio_filename}|{text_content}\n")
 
     def cleanup_duplicates(self):
         """重複したメタデータをクリーンアップ"""
